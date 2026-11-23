@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#fff9e8">
+  <title>간계밥 · 식사 기록</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <header><strong>간계밥 <span>2.0</span></strong><time id="date"></time><button id="settings" aria-label="설정">⚙</button></header>
+  <section class="summary" aria-labelledby="balanceTitle">
+    <div>
+      <h1 id="balanceTitle">오늘 남은 칼로리</h1><strong id="balance">—</strong>
+      <div class="summaryMeta"><span id="summary"></span><span id="activity"></span></div>
+    </div>
+    <img class="mascot" src="assets/mascot.webp" alt="웃는 간장계란밥">
+  </section>
+
+  <section class="surface" aria-labelledby="logTitle">
+    <div class="sectionHead"><h2 id="logTitle">오늘 먹은 음식 <span>· 입력 순서</span></h2><strong id="intake">0 kcal</strong></div>
+    <div id="cart" aria-live="polite"></div>
+    <button id="history" class="quiet" type="button">지난 기록</button>
+  </section>
+  <section class="surface" aria-labelledby="categoryTitle">
+    <div class="sectionHead categoryHead">
+      <h2 id="categoryTitle">음식 종류 선택</h2>
+      <button id="brandBrowse" class="brandBrowse" type="button" aria-haspopup="dialog" aria-controls="sheet">브랜드·장소 <span aria-hidden="true">›</span></button>
+    </div>
+    <div id="categories" class="categoryGrid"></div>
+    <div id="categoryOptions" class="foodGrid"></div>
+  </section>
+  <section class="surface" aria-labelledby="recTitle">
+    <div class="sectionHead"><h2 id="recTitle">추천 음식</h2><button id="dinner" class="quiet">저녁 추천</button></div>
+    <div id="cards" class="foodGrid"></div>
+    <button id="manual" class="wide inputButton">＋ 직접 입력</button>
+  </section>
+  <section class="surface" aria-labelledby="libraryTitle">
+    <h2 id="libraryTitle">내 음식 라이브러리</h2>
+    <div id="libraryTabs" class="libraryTabs" aria-label="라이브러리 분류">
+      <button data-library="often">자주 먹는</button><button data-library="favorite">즐겨찾기</button><button data-library="recent">최근 음식</button><button data-library="own">직접 등록</button>
+    </div>
+    <div id="library"></div>
+    <label class="searchBar"><span aria-hidden="true">⌕</span><input id="query" type="search" aria-label="음식명 · 브랜드 · 메뉴 검색" placeholder="음식명 · 브랜드 · 메뉴 검색"></label>
+    <small id="count" aria-live="polite"></small>
+    <div id="matches" class="foodGrid"></div>
+  </section>
+</main>
+<dialog id="sheet" aria-labelledby="dialogTitle">
+  <div class="dialogHead"><h2 id="dialogTitle"></h2><button id="close" aria-label="닫기">×</button></div>
+  <div id="panel"></div>
+</dialog>
+<output id="status" role="status"></output>
+<script src="db/start.js"></script><script src="db/brands.js"></script><script src="catalog.js"></script><script src="nutrition.js"></script><script src="recommendation.js"></script><script src="library.js"></script><script src="storage.js"></script><script src="app.js"></script>
+</body>
+</html>
