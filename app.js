@@ -128,12 +128,15 @@ function renderFeatured(items,rotate=false){
 function render(){
   const meals=dayMeals(),items=meals.flatMap(m=>m.items);
   const extra=state.settings.activity[today()]||0;
-  $('date').textContent=new Intl.DateTimeFormat('ko-KR',{month:'long',day:'numeric'}).format(new Date());
+  const date=new Date();
+  const monthDay=new Intl.DateTimeFormat('ko-KR',{month:'long',day:'numeric'}).format(date);
+  const weekday=new Intl.DateTimeFormat('ko-KR',{weekday:'short'}).format(date);
+  $('date').textContent=monthDay+' ('+weekday+')';
   const nutrients=Nutrition.totals(items);
   const estimated=nutrients.missing[0]>0;
-  $('balance').textContent=fmt(Nutrition.remaining(state.settings.goal,extra,items))+' kcal';
+  $('balanceValue').textContent=fmt(Nutrition.remaining(state.settings.goal,extra,items));
   $('summary').textContent='섭취 '+fmt(nutrients.values[0])+' · 목표 '+fmt(state.settings.goal);
-  $('activity').textContent='활동 '+fmt(extra)+' kcal'+(estimated?' · 미확인 열량 제외':'');
+  $('activity').textContent=' · 활동 '+fmt(extra)+' kcal'+(estimated?' · 미확인 열량 제외':'');
   $('intake').textContent=total(items);
   const focused=document.activeElement;
   const logHasFocus=$('cart').contains(focused);
