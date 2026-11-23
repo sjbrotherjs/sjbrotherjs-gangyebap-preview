@@ -17,7 +17,7 @@ button{min-width:44px;padding:6px 10px;cursor:pointer;touch-action:manipulation}
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button:disabled{opacity:.52}
 .summary{display:grid;grid-template-columns:minmax(0,23fr) minmax(0,46fr) minmax(0,30fr);align-items:center;gap:7px;padding:27px 3px 19px 0}
-.mascot{width:100%;height:auto;object-fit:contain}
+.mascot{width:100%;height:auto;object-fit:contain;transform:scaleX(-1)}
 .balancePanel{position:relative;min-width:0;border-left:1px solid #e9d8b4;padding-left:11px}
 .summary h1{font-size:clamp(11px,3.6vw,15px);line-height:1.25;font-weight:730;letter-spacing:-.35px}
 #balance{display:inline-block;position:relative;margin:6px 0 7px;padding-bottom:5px;font-size:clamp(24px,8.1vw,39px);line-height:1;font-weight:800;letter-spacing:-.055em;font-variant-numeric:tabular-nums;white-space:nowrap}
