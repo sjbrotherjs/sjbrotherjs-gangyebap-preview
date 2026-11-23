@@ -505,7 +505,7 @@ Store.update(()=>{}).then(profile=>{
 dialog.addEventListener('click',event=>{
   if(event.target!==dialog)return;
   const rect=dialog.getBoundingClientRect();
-  if(event.clientY<rect.top||event.clientX<rect.left||event.clientX>rect.right)dialog.close();
+  if(event.clientY<rect.top||event.clientY>rect.bottom||event.clientX<rect.left||event.clientX>rect.right)dialog.close();
 });
 let touchY;
 dialog.querySelector('.dialogHead').addEventListener('touchstart',e=>{touchY=e.touches[0].clientY},{passive:true});
