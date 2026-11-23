@@ -92,6 +92,39 @@ async function updateItem(meal,index,item){
   });
   render();
 }
+let featuredId, featuredCandidates;
+const featuredKey='gangyebap.featuredFood';
+
+function renderFeatured(items,rotate=false){
+  const cards=Recommend.list(mealType(state.settings),items,state);
+  const signature=JSON.stringify(cards.map(card=>card.id));
+  let index=cards.findIndex(card=>card.id===featuredId);
+  if(featuredCandidates===undefined){
+    try{index=cards.findIndex(card=>card.id===sessionStorage.getItem(featuredKey))}
+    catch{index=-1}
+    rotate=true;
+  }
+  if(rotate)index=(index+1)%Math.max(1,cards.length);
+  else if(featuredCandidates!==signature||index<0)index=0;
+  const card=cards[index];
+  featuredCandidates=signature;
+  featuredId=card?.id;
+  const container=$('cards');
+  container.replaceChildren();
+  $('refreshCard').disabled=cards.length<2;
+  $('refreshCard').onclick=()=>renderFeatured(items,true);
+  if(!card){
+    container.textContent='추천 음식 없음';
+    return;
+  }
+  try{sessionStorage.setItem(featuredKey,card.id)}catch{/* The recommendation still works without storage. */}
+  const button=document.createElement('button');
+  button.className='card';
+  button.dataset.food=card.id;
+  button.innerHTML=visual(card)+'<span><strong>'+escapeHTML(card.name)+'</strong><small>'+kcal(card.row)+(card.row[13]==='실험 예시'?' · 예시':'')+'</small></span>';
+  button.onclick=()=>add(card.row,card.id).catch(error=>notify(error.message));
+  container.append(button);
+}
 function render(){
   const meals=dayMeals(),items=meals.flatMap(m=>m.items);
   const extra=state.settings.activity[today()]||0;
@@ -107,14 +140,7 @@ function render(){
   const logRowIndex=logHasFocus?[...$('cart').children].indexOf(focused.closest('.logRow')):-1;
   rowList($('cart'),meals);
   if(logRowIndex>=0)$('cart').children[logRowIndex]?.querySelector('.editRow').focus({preventScroll:true});
-  $('cards').replaceChildren();
-  for(const card of Recommend.list(mealType(state.settings),items,state)){
-    const btn=document.createElement('button');
-    btn.className='card';
-    btn.innerHTML=visual(card)+'<span><strong>'+escapeHTML(card.name)+'</strong><small>'+kcal(card.row)+(card.row[13]==='실험 예시'?' · 예시':'')+'</small></span>';
-    btn.onclick=()=>add(card.row,card.id).catch(error=>notify(error.message));
-    $('cards').append(btn);
-  }
+  renderFeatured(items);
   renderLibrary();
 }
 function history(){

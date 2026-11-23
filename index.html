@@ -11,11 +11,15 @@
 <main>
   <header><strong>간계밥 <span>2.0</span></strong><time id="date"></time><button id="settings" aria-label="설정">⚙</button></header>
   <section class="summary" aria-labelledby="balanceTitle">
-    <div>
+    <img class="mascot" src="assets/mascot.webp" alt="웃는 간장계란밥">
+    <div class="balancePanel">
       <h1 id="balanceTitle">오늘 남은 칼로리</h1><strong id="balance">—</strong>
       <div class="summaryMeta"><span id="summary"></span><span id="activity"></span></div>
     </div>
-    <img class="mascot" src="assets/mascot.webp" alt="웃는 간장계란밥">
+    <div class="featuredFood" aria-labelledby="recTitle">
+      <div class="sectionHead"><h2 id="recTitle">추천 음식</h2><button id="refreshCard" class="quiet" type="button" aria-label="다른 음식 추천">↻</button></div>
+      <div id="cards" aria-live="polite"></div>
+    </div>
   </section>
 
   <section class="surface" aria-labelledby="logTitle">
@@ -31,11 +35,10 @@
     <div id="categories" class="categoryGrid"></div>
     <div id="categoryOptions" class="foodGrid"></div>
   </section>
-  <section class="surface" aria-labelledby="recTitle">
-    <div class="sectionHead"><h2 id="recTitle">추천 음식</h2><button id="dinner" class="quiet">저녁 추천</button></div>
-    <div id="cards" class="foodGrid"></div>
-    <button id="manual" class="wide inputButton">＋ 직접 입력</button>
-  </section>
+  <div class="mealActions">
+    <button id="manual" class="inputButton">＋ 직접 입력</button>
+    <button id="dinner" class="inputButton">저녁 추천</button>
+  </div>
   <section class="surface" aria-labelledby="libraryTitle">
     <h2 id="libraryTitle">내 음식 라이브러리</h2>
     <div id="libraryTabs" class="libraryTabs" aria-label="라이브러리 분류">
