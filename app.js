@@ -7,11 +7,11 @@ const kcal=(row,qty=1)=>row[4]==null?'열량 미확인':fmt(row[4]*qty)+' kcal';
 const norm=s=>String(s??'').normalize('NFKC').replace(/\s/g,'').toLowerCase();
 const cardsById=new Map(catalog.cards.map(card=>[card.id,card]));
 const categories=[
-  ['korean','한식','🍚','bibimbap'],['burger','패스트푸드','🍔','burger'],['pizza','피자','🍕'],
-  ['chicken','치킨','🍗','chicken'],['cafe','카페','☕','coffee'],['chinese','중식','🥡','mala'],
-  ['japanese','일식','🍣','sushi'],['quick','간편식','🥪'],['sweet','디저트','🍰','cake'],['all','더보기','＋'],
+  ['korean','한식','🍚','category-korean'],['burger','패스트푸드','🍔','category-burger'],['pizza','피자','🍕','category-pizza'],
+  ['chicken','치킨','🍗','category-chicken'],['cafe','카페','☕','category-cafe'],['chinese','중식','🥡','category-chinese'],
+  ['japanese','일식','🍣','category-japanese'],['quick','간편식','🥪','category-quick'],['sweet','디저트','🍰','category-sweet'],['all','더보기','＋'],
   ['snack','분식','🍢','tteokbokki'],['other','기타','🍽️']
-].map(([id,label,emoji,card])=>({id,label,emoji,card}));
+].map(([id,label,emoji,image])=>({id,label,emoji,image}));
 const brandGroups={
   burger:['맥도날드','버거킹','맘스터치','롯데리아','쉐이크쉑','파이브가이즈'],
   pizza:['도미노피자','피자헛','미스터피자','파파존스','청년피자','반올림피자'],
@@ -314,7 +314,7 @@ function tile(category){
   const button=document.createElement('button');
   button.className='categoryTile';
   button.dataset.category=category.id;
-  button.innerHTML=visual(cardsById.get(category.card),category.emoji)+'<span>'+escapeHTML(category.label)+'</span>';
+  button.innerHTML=visual(category,category.emoji)+'<span>'+escapeHTML(category.label)+'</span>';
   if(category.id==='all'){
     button.setAttribute('aria-expanded','false');
     button.onclick=()=>{
@@ -435,14 +435,6 @@ async function placePhoto(file){
   canvas.getContext('2d').drawImage(source,0,0,canvas.width,canvas.height);source.close();
   return canvas.toDataURL('image/webp',.8);
 }
-function dinner(){
-  const items=dayMeals().flatMap(m=>m.items);
-  const left=Nutrition.remaining(state.settings.goal,state.settings.activity[today()]||0,items);
-  modal('저녁 추천','<p>남은 열량 '+fmt(left)+' kcal</p><div id="dinnerRows" class="foodGrid"></div>');
-  const distance=card=>card.row[4]==null?Infinity:Math.abs(card.row[4]-left);
-  const rows=Recommend.list('저녁',items,state).sort((a,b)=>distance(a)-distance(b)).map(c=>c.row);
-  results($('dinnerRows'),rows,{choose:async row=>{await add(row,Recommend.group(row),1,{type:'저녁'});dialog.close()}});
-}
 function settings(){
   const s=state.settings;
   modal('설정 및 백업','<form id="prefs"><label>하루 목표 (kcal)<input type="number" name="goal" required min="1" value="'+s.goal+'"></label><label>목표에 포함되지 않은 오늘 추가 활동 (kcal)<input type="number" required name="activity" min="0" value="'+(s.activity[today()]||0)+'"></label><small>건강 앱 미연동 · 수동 입력</small>'+['lunch','dinner'].map((k,i)=>'<label>'+['점심','저녁'][i]+' 시작 시각<input type="number" min="1" max="23" name="'+k+'" value="'+s[k]+'" required></label>').join('')+'<button>설정 저장</button></form><hr><button id="offline">오프라인 파일 저장</button><button id="export">JSON 백업</button><label>백업 복원<input id="restore" type="file" accept=".json"></label><button id="csvExport">내 음식 CSV 백업</button><label>개인 음식 CSV 추가<input type="file" id="csvImport" accept=".csv"></label><button id="undoRestore">복원 전 상태로 돌아가기</button><p class="muted">제품, 조리법과 분량에 따라 영양값이 달라집니다. 미확인 항목이 있는 날에는 확인된 열량만 합산합니다.</p>');
@@ -480,7 +472,6 @@ document.addEventListener('click',async e=>{
     else if(b.id==='manual')manual();
     else if(b.id==='settings')settings();
     else if(b.id==='history')history();
-    else if(b.id==='dinner')dinner();
     else if(b.id==='close')dialog.close();
     else if(b.id==='offline'){
       if(location.protocol==='file:'){notify('이 폴더의 음식 파일을 오프라인에서 사용합니다.');return}

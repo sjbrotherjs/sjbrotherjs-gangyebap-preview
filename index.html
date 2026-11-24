@@ -30,9 +30,9 @@
     <div id="cart" aria-live="polite"></div>
     <button id="history" type="button">지난 기록 <span aria-hidden="true">›</span></button>
   </section>
-  <div class="mealActions">
-    <button id="manual" class="inputButton">＋ 직접 입력</button>
-    <button id="dinner" class="inputButton">저녁 추천</button>
+  <div class="libraryShortcut">
+    <span class="libraryShortcutLabel"><span class="bookIcon" aria-hidden="true"></span>내 음식라이브러리</span>
+    <button id="manual" type="button">＋ 직접 등록</button>
   </div>
   <section class="surface" aria-labelledby="libraryTitle">
     <h2 id="libraryTitle">내 음식 라이브러리</h2>
@@ -42,7 +42,7 @@
     <div id="library"></div>
   </section>
   <section class="foodSearch" role="search" aria-label="음식 검색">
-    <label class="searchBar"><span aria-hidden="true">⌕</span><input id="query" type="search" aria-label="음식명 · 브랜드 · 메뉴 검색" placeholder="음식명 · 브랜드 · 메뉴 검색"></label>
+    <label class="searchBar"><span class="searchIcon" aria-hidden="true"></span><input id="query" type="search" aria-label="음식명 · 브랜드 · 메뉴 검색" placeholder="음식명 · 브랜드 · 메뉴 검색"></label>
     <small id="count" aria-live="polite"></small>
     <div id="matches" class="foodGrid"></div>
   </section>
