@@ -21,7 +21,11 @@ const brandGroups={
   sweet:['배스킨라빈스','던킨','투썸플레이스'],snack:['김밥천국'],other:['애슐리퀸즈']
 };
 let state, timer, searchToken=0, libraryMode='often', libraryLimit=8;
-let selectedCategory=null, categoriesExpanded=false;
+let categoriesExpanded=false;
+let draft={id:Store.uid(),items:[]}, savingMeal=false, draftCollapsed=false;
+const draftKey='gangyebap.mealDraft';
+const sideCache=new Map();
+let relatedVersion=0;
 
 function notify(message){
   (dialog.open?dialog:document.body).append($('status'));
@@ -47,19 +51,109 @@ function visual(card,fallback='🍽️'){
     ? '<img src="assets/'+encodeURIComponent(card.image)+'.webp" alt="">'
     : escapeHTML(card?.emoji||fallback))+'</span>';
 }
-async function add(row, group=Recommend.group(row), qty=1, options={}){
-  const at=new Date(),id=Store.uid();
+function updateDraft(){
+  try{sessionStorage.setItem(draftKey,JSON.stringify(draft))}catch{/* The current page retains the draft. */}
+  renderDraft();
+}
+function addItems(items){
+  if(savingMeal)return;
+  for(const item of items){
+    const same=draft.items.find(existing=>JSON.stringify(existing.row)===JSON.stringify(item.row)&&existing.qty+item.qty<=100);
+    if(same)same.qty+=item.qty;
+    else draft.items.push({...item});
+  }
+  draftCollapsed=false;
+  updateDraft();
+}
+async function add(row,group=Meal.group(row),qty=1,options={}){
+  const item={row,qty,group};
+  if(!Store.mealItem(item))throw Error('음식명, 기준량과 수량을 확인해 주세요.');
+  if(options.keep)await registerFood(row,options.place);
+  addItems([item]);
+  if(dialog.open)dialog.close();
+}
+async function registerFood(row,place){
   state=await Store.update(s=>{
-    if(options.keep)s.personal.push(row);
-    if(options.place){
-      s.settings.places??={};
-      s.settings.places={...s.settings.places,[row[2]]:options.place};
-    }
-    s.meals.push({id,at:at.toISOString(),type:options.type||mealType(s.settings,at.getHours()),version:catalog.version,
-      items:[{row,qty,group}]});
+    s.personal.push(row);
+    if(place)s.settings.places={...s.settings.places,[row[2]]:place};
   });
-  render();
-  notify(row[1]+' 기록 완료');
+  renderLibrary();
+}
+async function finishMeal(){
+  if(savingMeal||!draft.items.length)return;
+  savingMeal=true;
+  $('finishMeal').disabled=true;
+  const at=new Date(),{id,items}=structuredClone(draft);
+  try{
+    state=await Store.update(s=>{
+      if(!s.meals.some(meal=>meal.id===id)){
+        s.meals.push({id,at:at.toISOString(),type:mealType(s.settings,at.getHours()),version:catalog.version,items});
+      }
+    });
+    draft={id:Store.uid(),items:[]};
+    updateDraft();
+    render();
+    notify('식사를 기록했습니다.');
+  }finally{
+    savingMeal=false;
+    $('finishMeal').disabled=false;
+  }
+}
+function renderDraft(){
+  const version=++relatedVersion;
+  const {items}=draft;
+  $('calculator').hidden=!items.length;
+  $('draftRows').hidden=draftCollapsed;
+  $('saveSet').hidden=draftCollapsed;
+  $('related').hidden=!items.length||draftCollapsed;
+  $('toggleDraft').setAttribute('aria-expanded',String(!draftCollapsed));
+  $('toggleDraft').textContent=draftCollapsed?'⌃ 담은 음식 '+items.length+'종':'⌄ 식사 계산기';
+  $('draftTotal').textContent=total(items);
+  const rows=$('draftRows');
+  rows.replaceChildren();
+  items.forEach((item,index)=>{
+    const {row,qty}=item;
+    const line=document.createElement('div');
+    line.className='draftRow';
+    line.innerHTML='<span><strong>'+escapeHTML(row[1])+'</strong><small>'+escapeHTML(row[3])+'</small></span>'+
+      '<button type="button" aria-label="수량 줄이기">−</button><span>'+fmt(qty)+'</span><button type="button" aria-label="수량 늘리기">＋</button>'+
+      '<b>'+kcal(row,qty)+'</b><button type="button" aria-label="빼기">×</button>';
+    const [minus,plus,remove]=line.querySelectorAll('button');
+    minus.disabled=qty<=.5;plus.disabled=qty>=100;
+    const change=delta=>{if(!savingMeal){item.qty=Math.min(100,Math.max(.5,item.qty+delta));updateDraft()}};
+    minus.onclick=()=>change(-.5);plus.onclick=()=>change(.5);
+    remove.onclick=()=>{if(!savingMeal){items.splice(index,1);updateDraft()}};
+    rows.append(line);
+  });
+  const related=$('relatedFoods');
+  related.replaceChildren();
+  if(draftCollapsed||!items.length)return;
+  function show(brandRows){
+    if(version!==relatedVersion)return;
+    const choices=Meal.related(state,mealType(state.settings),items,brandRows);
+    $('related').hidden=!choices.length;
+    related.replaceChildren();
+    for(const row of choices){
+      const button=document.createElement('button');
+      button.className='relatedCard';
+      const image=cardsById.get(Recommend.group(row));
+      const foodGroup=Meal.group(row);
+      const generic=row[0].startsWith('demo:')&&Meal.groups[foodGroup]?.[0]===row[1];
+      button.innerHTML=(image?.row[0]===row[0]?visual(image):'')+'<strong>'+escapeHTML(row[1])+'</strong><small>'+
+        (generic?'세부 메뉴':kcal(row))+'</small><span aria-hidden="true">'+(generic?'›':'＋')+'</span>';
+      button.onclick=()=> (generic?showFoodGroup(foodGroup):add(row)).catch(error=>notify(error.message));
+      related.append(button);
+    }
+  }
+  show([]);
+  const brands=[...new Set(items.map(item=>item.row[2]).filter(name=>Object.hasOwn(brandIndex,name)))];
+  if(brands.length)Promise.all(brands.map(name=>{
+    if(!sideCache.has(name)){
+      const ids=brandIndex[name].filter(([,group])=>/사이드|음료/.test(group)).map(([id])=>id);
+      sideCache.set(name,FoodDB.records(ids).catch(()=>{sideCache.delete(name);return []}));
+    }
+    return sideCache.get(name);
+  })).then(rows=>show(rows.flat()));
 }
 function rowList(el,meals,onChange){
   el.replaceChildren();
@@ -78,7 +172,7 @@ function rowList(el,meals,onChange){
     el.append(row);
   }
 }
-async function updateItem(meal,index,item){
+async function updateItem(meal,index,item,personal){
   const original=JSON.stringify(meal);
   state=await Store.update(s=>{
     const position=s.meals.findIndex(m=>m.id===meal.id);
@@ -89,6 +183,7 @@ async function updateItem(meal,index,item){
       current.items.splice(index,1);
       if(!current.items.length)s.meals.splice(position,1);
     }
+    if(personal)s.personal=[...s.personal.filter(row=>row[0]!==personal[0]),personal];
   });
   render();
 }
@@ -144,6 +239,7 @@ function render(){
   rowList($('cart'),meals);
   if(logRowIndex>=0)$('cart').children[logRowIndex]?.querySelector('.editRow').focus({preventScroll:true});
   renderFeatured(items);
+  renderQuickGroups();
   renderLibrary();
 }
 function history(){
@@ -162,6 +258,133 @@ function historyFor(date){
   $('historyDate').onchange();
 }
 function favoriteKey(row){return catalog.cards.find(c=>c.row[0]===row[0])?.id||row[0]}
+function personalRows(){
+  return [...new Map([...state.meals.flatMap(meal=>meal.items.map(item=>item.row)),...Object.values(state.settings.favoriteRows||{}),...state.personal]
+    .map(row=>[row[0],row])).values()];
+}
+function foodGroupButton(id){
+  const [name,image]=Meal.groups[id];
+  const button=document.createElement('button');
+  button.type='button';button.className='categoryTile';
+  button.innerHTML=visual({image},'🍚')+'<span>'+escapeHTML(name)+'</span>';
+  button.onclick=()=>showFoodGroup(id).catch(error=>notify(error.message));
+  return button;
+}
+function renderQuickGroups(){
+  $('quickGroups').replaceChildren(...Meal.initial(state,mealType(state.settings)).map(foodGroupButton));
+}
+async function showFoodGroup(id){
+  const [name,image,,category,queries]=Meal.groups[id];
+  modal(name,
+    '<section id="groupPersonal" hidden><h3>내 라이브러리</h3><div class="resultList"></div></section>'+
+    '<section><h3>일반 메뉴</h3><div id="groupGeneral" class="resultList">메뉴를 불러오는 중…</div></section>'+
+    '<section id="groupBrand" hidden><h3>브랜드로 선택하기</h3><div id="groupBrandButtons" class="brandChips"></div><div id="groupBrandMenu" class="resultList"></div></section>');
+  if(image)$('dialogTitle').insertAdjacentHTML('afterbegin',visual({image}));
+  const general=$('groupGeneral'),personal=$('groupPersonal'),brand=$('groupBrand');
+  const score=Meal.profiles(state,mealType(state.settings),row=>row[0]);
+  const rank=row=>score(row[0],0,state.favorites.includes(favoriteKey(row)));
+  const own=personalRows().filter(row=>Meal.belongs(row,id)).sort((a,b)=>rank(b)-rank(a));
+  if(own.length){
+    personal.hidden=false;
+    results(personal.querySelector('.resultList'),Meal.uniqueRows(own).slice(0,8));
+  }
+  const brandNames=Object.keys(brandIndex).filter(name=>
+    (brandGroups[category]||[]).includes(name)||(id==='burger'&&name==='KFC'));
+  const brandRows=await FoodDB.records(brandNames.flatMap(name=>brandIndex[name].map(entry=>entry[0])));
+  if(!general.isConnected||!dialog.open)return;
+  const available=brandNames.map(brandName=>[brandName,brandRows.filter(row=>row[2]===brandName&&Meal.belongs(row,id))])
+    .filter(([,rows])=>rows.length);
+  if(available.length){
+    brand.hidden=false;
+    const buttons=$('groupBrandButtons'),list=$('groupBrandMenu');
+    for(const [brandName,rows] of available){
+      const button=document.createElement('button');
+      button.textContent=brandName;
+      button.setAttribute('aria-pressed','false');
+      button.onclick=()=>{
+        for(const entry of buttons.children)entry.setAttribute('aria-pressed',String(entry===button));
+        results(list,Meal.uniqueRows(rows));
+      };
+      buttons.append(button);
+    }
+  }
+  const source=[];
+  for(const query of queries)source.push(...await FoodDB.search(query,40));
+  if(!general.isConnected||!dialog.open)return;
+  const known=new Set(own.map(row=>row[0]));
+  const demo=catalog.cards.find(card=>card.id===id)?.row;
+  const rows=Meal.uniqueRows([...source.filter(row=>row[0].startsWith('mfds:')&&!row[2]&&Meal.belongs(row,id)),
+    ...(demo?[demo]:[])].filter(row=>!known.has(row[0])));
+  function show(limit){
+    results(general,rows.slice(0,limit));
+    if(!rows.length)general.textContent='확인된 일반 메뉴가 없습니다.';
+    if(rows.length>limit){
+      const more=document.createElement('button');more.textContent='메뉴 더보기';more.onclick=()=>show(limit+8);general.append(more);
+    }
+  }
+  show(4);
+}
+function renderSets(container){
+  container.className='resultList';container.replaceChildren();
+  const repeated=Meal.repeatedSet(state);
+  if(repeated){
+    const hint=document.createElement('button');
+    hint.textContent='자주 함께 먹은 조합 저장';
+    hint.onclick=()=>editSet(null,repeated.items);
+    container.append(hint);
+  }
+  for(const [title,sets,custom] of [['내 세트',state.sets||[],true],['기본 세트',Meal.basicSets(),false]]){
+    if(!sets.length)continue;
+    const heading=document.createElement('h3');heading.textContent=title;container.append(heading);
+    for(const set of sets){
+      const wrap=document.createElement('div');wrap.className='resultWrap';
+      const button=document.createElement('button');button.className='result';
+      button.innerHTML='<span><strong>'+escapeHTML(set.name)+'</strong><small>'+escapeHTML(set.items.map(item=>item.row[1]).join(' + '))+
+        '</small></span><b>'+total(set.items)+'</b>';
+      button.onclick=()=>addItems(set.items);
+      wrap.append(button);
+      if(custom){
+        const edit=document.createElement('button');edit.className='quiet';edit.textContent='수정';edit.onclick=()=>editSet(set);
+        const remove=document.createElement('button');remove.className='quiet';remove.textContent='삭제';
+        remove.onclick=async()=>{if(confirm(set.name+' 세트를 삭제할까요?')){
+          try{state=await Store.update(s=>{s.sets=s.sets.filter(entry=>entry.id!==set.id)});renderLibrary()}
+          catch(error){notify(error.message)}
+        }};
+        wrap.append(edit,remove);
+      }
+      container.append(wrap);
+    }
+  }
+}
+function editSet(existing,source=draft.items){
+  const id=existing?.id||Store.uid();
+  const items=structuredClone(existing?.items||source);
+  if(!items.length)return;
+  modal(existing?'세트 수정':'세트 저장','<form id="setForm"><label>세트 이름<input name="setName" required maxlength="80" value="'+
+    escapeHTML(existing?.name||'')+'"></label><div id="setRows" class="resultList"></div><button class="primary wide">세트 저장</button></form>');
+  function draw(){
+    $('setRows').replaceChildren(...items.map((item,index)=>{
+      const line=document.createElement('div');line.className='setEditRow';
+      line.innerHTML='<strong>'+escapeHTML(item.row[1])+'</strong><input type="number" aria-label="수량" min="0.5" max="100" step="0.5" value="'+item.qty+'" required>'+
+        '<button type="button" aria-label="빼기">×</button>';
+      line.querySelector('input').oninput=e=>{item.qty=e.target.valueAsNumber};
+      line.querySelector('button').onclick=()=>{if(items.length>1){items.splice(index,1);draw()}};
+      line.querySelector('button').disabled=items.length===1;
+      return line;
+    }));
+  }
+  draw();
+  $('setForm').onsubmit=async event=>{
+    event.preventDefault();
+    const form=event.currentTarget,name=new FormData(form).get('setName').trim(),submit=form.querySelector('.primary');
+    submit.disabled=true;
+    try{
+      state=await Store.update(s=>{s.sets=[...(s.sets||[]).filter(set=>set.id!==id),{id,name,items}]});
+      dialog.close();libraryMode='sets';renderLibrary();notify('세트를 저장했습니다.');
+    }catch(error){notify(error.message)}
+    finally{submit.disabled=false}
+  };
+}
 async function toggleFavorite(row){
   const id=favoriteKey(row);
   state=await Store.update(s=>{
@@ -187,6 +410,7 @@ function renderLibrary(){
     own:()=>state.personal
   };
   document.querySelectorAll('[data-library]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.library===libraryMode)));
+  if(libraryMode==='sets'){renderSets(library);return}
   const rows=options[libraryMode]();
   library.className=rows.length?'foodGrid':'';
   if(rows.length){
@@ -198,6 +422,11 @@ function renderLibrary(){
     }
   }
   else library.innerHTML='<p class="empty">'+({often:'두 번 이상 기록한 음식이 표시됩니다.',favorite:'음식의 ☆ 버튼을 눌러 담아 보세요.',recent:'최근 음식이 없습니다.',own:'직접 입력한 음식을 보관할 수 있습니다.'})[libraryMode]+'</p>';
+  if(libraryMode==='own'){
+    const register=document.createElement('button');
+    register.className='quiet libraryMore';register.type='button';register.textContent='＋ 내 음식 등록';
+    register.onclick=()=>manual(true);library.append(register);
+  }
 }
 function nutrition(row){
   const fields=[['열량',4,'kcal'],['탄수화물',5,'g'],['단백질',6,'g'],['지방',7,'g'],['당류',8,'g'],['나트륨',9,'mg']];
@@ -207,16 +436,14 @@ function nutrition(row){
     '<dl class="nutrients">'+fields.map(([label,i,unit])=>'<dt>'+label+'</dt><dd>'+(row[i]==null?'미확인':fmt(row[i])+' '+unit)+'</dd>').join('')+
     '</dl><p>출처 '+link+'</p><small>'+escapeHTML([row[14],row[12],row[15]].filter(Boolean).join(' · '))+'</small>';
 }
-function results(el,rows,{choose=add,illustration=false,showFavorite=true}={}){
+function results(el,rows,{choose=add,images=true,showFavorite=true}={}){
   el.replaceChildren();
   for(const row of rows){
     const wrap=document.createElement('div');wrap.className='resultWrap';
     const card=cardsById.get(Recommend.group(row));
-    const origin=row[0].startsWith('mfds:')?row[15]:'';
     const variant=[row[2],row[3],kcal(row)].filter(Boolean).join(' · ');
-    wrap.innerHTML='<button class="result">'+visual(card)+'<span><strong>'+escapeHTML(row[1])+'</strong><small>'+
-      escapeHTML(variant)+'</small>'+(origin?'<small>'+escapeHTML(origin)+'</small>':'')+
-      (illustration?'<small>분류 예시 이미지</small>':'')+'</span></button>'+
+    wrap.innerHTML='<button class="result">'+(images&&card?.image&&card.row[0]===row[0]?visual(card):'')+
+      '<span><strong>'+escapeHTML(row[1])+'</strong><small>'+escapeHTML(variant)+'</small></span><span class="resultAdd" aria-hidden="true">＋</span></button>'+
       (showFavorite?'<button class="star" aria-pressed="'+state.favorites.includes(favoriteKey(row))+'" aria-label="'+escapeHTML(row[1])+' 즐겨찾기">'+(state.favorites.includes(favoriteKey(row))?'★':'☆')+'</button>':'');
     const button=wrap.querySelector('.result');
     button.onclick=async()=>{
@@ -252,24 +479,12 @@ function bindQty(row,value){
   refresh();
   return refresh;
 }
-function recordMenuItem(row,back,backLabel='메뉴판'){
-  modal(row[1],'<button id="sheetBack" class="sheetBack">‹ '+escapeHTML(backLabel)+'</button><form id="menuEntry">'+numberInput(row)+
-    '<button class="primary wide">기록에 추가</button></form><details><summary>영양정보</summary>'+nutrition(row)+'</details>');
-  $('sheetBack').onclick=back;
-  bindQty(row,1);
-  $('menuEntry').onsubmit=async e=>{
-    e.preventDefault();
-    const button=e.currentTarget.querySelector('button.primary');button.disabled=true;
-    try{await add(row,Recommend.group(row),Number($('qty').value));back()}
-    catch(error){notify(error.message)}
-    finally{button.disabled=false}
-  };
-}
 function editItem(meal,index,back){
   const item=meal.items[index],row=item.row;
   modal('음식 기록 수정','<form id="editEntry"><label>음식명<input name="name" required maxlength="80" value="'+escapeHTML(row[1])+'"></label>'+
+    '<label>기준 분량<input name="basis" required maxlength="60" value="'+escapeHTML(row[3])+'"></label>'+
     '<label>기준 열량 (kcal)<input name="energy" type="number" min="0" step="any" value="'+escapeHTML(row[4])+'"></label>'+
-    numberInput(row)+'<button class="primary wide">변경 저장</button></form><details><summary>영양정보</summary>'+nutrition(row)+'</details>');
+    numberInput(row)+'<label><input type="checkbox" name="keepEdit"> 개인 라이브러리에 등록</label><button class="primary wide">변경 저장</button></form><details><summary>영양정보</summary>'+nutrition(row)+'</details>');
   const preview=[...row], refresh=bindQty(preview,item.qty);
   if(item.qty%0.5!==0)$('qty').step='any'; // Older backups can contain fractional quantities.
   const form=$('editEntry');
@@ -278,13 +493,14 @@ function editItem(meal,index,back){
     e.preventDefault();
     const name=form.elements.name.value.trim();
     if(!name){notify('음식명을 입력해 주세요.');return}
-    const updated=[...preview];updated[1]=name;
-    if(updated[4]!==row[4]){
+    const updated=[...preview];updated[1]=name;updated[3]=form.elements.basis.value.trim();
+    if(updated[4]!==row[4]||updated[3]!==row[3]||updated[1]!==row[1]){
       updated[11]='직접 수정';updated[12]=today();updated[13]='사용자 입력';updated[14]='';
     }
     const button=form.querySelector('.primary');button.disabled=true;
     try{
-      await updateItem(meal,index,{...item,row:updated,qty:Number($('qty').value)});
+      const personal=form.elements.keepEdit.checked?[row[0].startsWith('personal:')?row[0]:'personal:'+Store.uid(),...updated.slice(1)]:null;
+      await updateItem(meal,index,{...item,row:updated,group:Meal.group(updated),qty:Number($('qty').value)},personal);
       dialog.close();
       if(back){await new Promise(resolve=>requestAnimationFrame(resolve));back()}
       notify('기록을 수정했습니다.');
@@ -299,17 +515,6 @@ function placeMeta(name){
   const metadata=state.settings.places?.[name];
   return metadata&&typeof metadata==='object'?metadata:{};
 }
-function categoryFor(card){
-  if(card.id==='pizza')return 'pizza';
-  if(card.category==='패스트푸드')return /chicken/.test(card.id)?'chicken':'burger';
-  if(card.category==='음료')return 'cafe';
-  if(card.category==='중식·아시아')return 'chinese';
-  if(card.category==='양식·일식')return 'japanese';
-  if(card.category==='간식·디저트')return 'sweet';
-  if(card.category==='분식·면')return 'snack';
-  if(card.category==='한식')return 'korean';
-  return 'quick';
-}
 function tile(category){
   const button=document.createElement('button');
   button.className='categoryTile';
@@ -321,21 +526,12 @@ function tile(category){
       categoriesExpanded=!categoriesExpanded;
       button.setAttribute('aria-expanded',String(categoriesExpanded));
       $('categories').querySelectorAll('[data-extra-category]').forEach(tile=>{tile.hidden=!categoriesExpanded});
-      if(!categoriesExpanded&&categories.slice(10).includes(selectedCategory))selectCategory(null);
     };
   }else{
-    button.setAttribute('aria-pressed','false');
-    button.onclick=()=>selectCategory(selectedCategory===category?null:category);
+    button.setAttribute('aria-haspopup','dialog');
+    button.onclick=()=>browse(category);
   }
   return button;
-}
-function selectCategory(category){
-  selectedCategory=category;
-  $('categories').querySelectorAll('[aria-pressed]').forEach(button=>{
-    button.setAttribute('aria-pressed',String(button.dataset.category===category?.id));
-  });
-  const rows=category?catalog.cards.filter(card=>categoryFor(card)===category.id).map(card=>card.row):[];
-  results($('categoryOptions'),rows,{choose:row=>recordMenuItem(row,()=>dialog.close(),'음식 종류')});
 }
 function browse(category,query=''){
   const own=registeredPlaces();
@@ -392,39 +588,59 @@ async function menu(name,back,criteria={query:'',group:'전체'},loaded=null){
   function show(){
     const matched=rows.filter((row,i)=>(group.value==='전체'||group.value===groups[i])&&norm(row[1]).includes(norm(field.value)));
     $('menuStatus').textContent=matched.length?'': '일치하는 메뉴가 없습니다.';
-    results($('menu'),matched,{illustration:true,choose:row=>recordMenuItem(row,
-      ()=>menu(name,back,{query:field.value,group:group.value},rows).catch(error=>notify(error.message)))});
+    results($('menu'),Meal.uniqueRows(matched));
   }
   field.oninput=group.onchange=show;show();
 }
 async function searchHome(){
   const token=++searchToken,query=norm($('query').value);
   $('matches').replaceChildren();
+  $('clearSearch').hidden=!query;
   $('count').textContent=query?'검색 중…':'';
   if(!query)return;
   try{
-    const personal=state.personal.filter(r=>!FoodDB.isBelowThreshold(r)&&norm(r[1]+' '+r[2]).includes(query));
+    const personal=personalRows().filter(r=>!FoodDB.isBelowThreshold(r)&&norm(r[1]+' '+r[2]).includes(query));
     const brands=Object.keys(brandIndex).filter(n=>norm(n).includes(query));
     const indices=brands.flatMap(n=>brandIndex[n].map(e=>e[0])).slice(0,40);
-    const rows=[...personal,...await FoodDB.records(indices),...await FoodDB.search(query)];
+    const source=[...await FoodDB.records(indices),...await FoodDB.search(query,80)];
+    const exact=row=>Number(norm(row[1])===query);
+    const rows=[...personal,...source].sort((a,b)=>exact(b)-exact(a));
     if(token!==searchToken)return;
-    const distinct=[...new Map(rows.map(r=>[r[0],r])).values()].slice(0,40);
-    $('count').textContent=distinct.length?'검색 결과 '+distinct.length+'건':'검색 결과 없음';
-    results($('matches'),distinct,{illustration:true});
+    const broad=query==='밥'?['rice','friedrice','ricebowl','bibimbap','gimbap','grainrice']:
+      Object.keys(Meal.groups).filter(id=>norm(Meal.groups[id][0])===query);
+    const distinct=Meal.uniqueRows(rows);
+    function draw(limit){
+      const list=$('matches');
+      results(list,distinct.slice(0,Math.max(0,limit-broad.length)),{images:false});
+      const groupButtons=broad.map(id=>{
+        const button=document.createElement('button');
+        button.className='searchGroup';button.textContent=Meal.groups[id][0]+' · 세부 메뉴 보기 ›';
+        button.onclick=()=>showFoodGroup(id).catch(error=>notify(error.message));
+        return button;
+      });
+      list.prepend(...groupButtons);
+      if(distinct.length+broad.length>limit){
+        const more=document.createElement('button');more.textContent='검색 더보기';more.onclick=()=>draw(limit+8);list.append(more);
+      }
+      $('count').textContent=list.children.length?'검색 결과':'검색 결과 없음';
+    }
+    draw(8);
   }catch(error){
     if(token===searchToken){$('count').textContent='검색을 완료하지 못했습니다.';notify(error.message)}
   }
 }
-function manual(){
-  modal('음식 직접 입력','<form id="entry"><label>음식명<input name="name" required maxlength="80"></label>'+
+function manual(registerOnly=false){
+  modal(registerOnly?'내 음식 등록':'음식 직접 입력','<form id="entry"><label>음식명<input name="name" required maxlength="80"></label>'+
     '<label>기준 분량<input name="basis" required maxlength="60" placeholder="예: 한 그릇 250g"></label>'+
+    (registerOnly?'<input name="registerOnly" type="hidden" value="1">':'<label>수량<input name="entryQty" type="number" min="0.5" max="100" step="0.5" value="1" required></label>')+
     ['열량 (kcal)','탄수화물 (g)','단백질 (g)','지방 (g)'].map((label,i)=>
       '<label>'+label+'<input name="n'+i+'" type="number" step="any" min="0" '+(!i?'required':'')+'></label>').join('')+
     '<details><summary>장소 연결</summary><label>장소 이름<input name="place" maxlength="80"></label>'+
     '<label>음식 종류<select name="category"><option value="">기타</option>'+
     categories.filter(c=>!['all','other'].includes(c.id)).map(c=>'<option value="'+c.id+'">'+c.label+'</option>').join('')+
     '</select></label><label>장소 사진 (선택)<input name="photo" type="file" accept="image/png,image/jpeg,image/webp"></label></details>'+
-    '<label><input name="keep" type="checkbox" checked> 개인 라이브러리에 저장</label><button class="primary wide">기록에 추가</button></form>');
+    (registerOnly?'<button class="primary wide">내 음식 저장</button>':
+      '<label><input name="keep" type="checkbox"> 개인 라이브러리에 등록</label><button class="primary wide">계산기에 추가</button>')+'</form>');
 }
 async function placePhoto(file){
   if(!file?.size)return '';
@@ -454,12 +670,14 @@ document.addEventListener('submit',async e=>{
       dialog.close();render();return;
     }
     const n=i=>fields.get('n'+i)===''?null:Number(fields.get('n'+i));
-    const place=fields.get('place').trim(),keep=Boolean(fields.get('keep'));
+    const place=fields.get('place').trim(),registerOnly=Boolean(fields.get('registerOnly')),keep=registerOnly||Boolean(fields.get('keep'));
     const row=['personal:'+Store.uid(),fields.get('name').trim(),place,fields.get('basis').trim(),n(0),n(1),n(2),n(3),null,null,null,'직접 입력',today(),'사용자 입력','',''];
     const selected=fields.get('category');
     const existing=placeMeta(place);
     const metadata=place&&keep?{category:selected||existing.category||'other',image:await placePhoto(fields.get('photo'))||existing.image||''}:null;
-    await add(row,Recommend.group(row),1,{keep,place:metadata});
+    if(registerOnly){
+      await registerFood(row,metadata);notify('내 음식에 등록했습니다.');
+    }else await add(row,Meal.group(row),Number(fields.get('entryQty')),{keep,place:metadata});
     dialog.close();
   }catch(error){notify(error.message)}
   finally{submit.disabled=false}
@@ -472,6 +690,10 @@ document.addEventListener('click',async e=>{
     else if(b.id==='manual')manual();
     else if(b.id==='settings')settings();
     else if(b.id==='history')history();
+    else if(b.id==='finishMeal')await finishMeal();
+    else if(b.id==='toggleDraft'){draftCollapsed=!draftCollapsed;renderDraft()}
+    else if(b.id==='saveSet')editSet();
+    else if(b.id==='clearSearch'){$('query').value='';await searchHome()}
     else if(b.id==='close')dialog.close();
     else if(b.id==='offline'){
       if(location.protocol==='file:'){notify('이 폴더의 음식 파일을 오프라인에서 사용합니다.');return}
@@ -511,6 +733,11 @@ document.addEventListener('change',async e=>{
 });
 Store.update(()=>{}).then(profile=>{
   state=profile;
+  try{
+    const saved=JSON.parse(sessionStorage.getItem(draftKey));
+    if(saved&&typeof saved.id==='string'&&saved.id.length<=100&&Array.isArray(saved.items)&&
+       saved.items.every(Store.mealItem)&&!state.meals.some(meal=>meal.id===saved.id))draft=saved;
+  }catch{/* Ignore invalid session data. */}
   $('categories').append(...categories.slice(0,10).map(tile));
   $('categories').append(...categories.slice(10).map(category=>{
     const button=tile(category);
@@ -518,9 +745,15 @@ Store.update(()=>{}).then(profile=>{
     button.hidden=true;
     return button;
   }));
-  $('brandBrowse').onclick=()=>browse(selectedCategory||categories.find(category=>category.id==='all'));
+  $('brandBrowse').onclick=()=>browse(categories.find(category=>category.id==='all'));
   $('query').addEventListener('input',searchHome);
+  if(typeof ResizeObserver==='function'){
+    new ResizeObserver(()=>{
+      document.querySelector('main').style.setProperty('--calculator-height',$('calculator').offsetHeight+'px');
+    }).observe($('calculator'));
+  }
   render();
+  renderDraft();
 }).catch(()=>notify('로컬 저장소를 열 수 없습니다. 브라우저 저장 권한을 확인해 주세요.'));
 dialog.addEventListener('click',event=>{
   if(event.target!==dialog)return;

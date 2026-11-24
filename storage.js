@@ -8,6 +8,7 @@ const Store=(()=>{
       [0,1,3].every(i=>typeof r[i]==='string'&&r[i].trim())&&r.slice(4,11).every(n=>n===null||finite(n));
   }
   function unique(list){return new Set(list).size===list.length}
+  const mealItem=i=>Boolean(i&&row(i.row)&&str(i.group??'',100)&&finite(i.qty)&&i.qty>0&&i.qty<=100);
   function optionalMap(value, validateValue){
     return value===undefined||Boolean(value&&typeof value==='object'&&!Array.isArray(value)&&Object.entries(value).every(([key,item])=>str(key,100)&&validateValue(item)));
   }
@@ -21,11 +22,12 @@ const Store=(()=>{
       !Number.isInteger(settings.lunch)||!Number.isInteger(settings.dinner)||settings.lunch<1||settings.dinner>23||settings.lunch>=settings.dinner||
       !settings.activity||Array.isArray(settings.activity)||typeof settings.activity!=='object'||!Object.entries(settings.activity).every(([k,v])=>/^\d{4}-\d\d-\d\d$/.test(k)&&finite(v))||
       !optionalMap(settings.places,validPlace)||!optionalMap(settings.favoriteRows,row)||
+      (s.sets!==undefined&&(!Array.isArray(s.sets)||!s.sets.every(set=>set&&str(set.id,100)&&set.id&&str(set.name,80)&&set.name.trim()&&Array.isArray(set.items)&&set.items.length&&set.items.every(mealItem))||!unique(s.sets.map(set=>set.id))))||
       (settings.recentPlaces!==undefined&&(!Array.isArray(settings.recentPlaces)||!settings.recentPlaces.every(name=>str(name,100))))||
       !Array.isArray(s.favorites)||!s.favorites.every(f=>str(f,100))||!Array.isArray(s.personal)||!s.personal.every(r=>row(r)&&r[0].startsWith('personal:'))||
       !unique(s.personal.map(r=>r[0]))||!Array.isArray(s.meals)||!s.meals.every(m=>m&&str(m.id,100)&&m.id&&Number.isFinite(Date.parse(m.at))&&
         ['아침','점심','저녁'].includes(m.type)&&str(m.version,100)&&Array.isArray(m.items)&&m.items.length&&
-        m.items.every(i=>row(i.row)&&str(i.group??'',100)&&finite(i.qty)&&i.qty>0&&i.qty<=100))||!unique(s.meals.map(m=>m.id)))throw Error('백업 형식이나 영양값을 확인해 주세요.');
+        m.items.every(mealItem))||!unique(s.meals.map(m=>m.id)))throw Error('백업 형식이나 영양값을 확인해 주세요.');
     return s;
   }
   function migrate(s){
@@ -53,5 +55,5 @@ const Store=(()=>{
     });
   }
   async function previous(){const conn=await open();return new Promise((ok,no)=>{const r=conn.transaction('profile').objectStore('profile').get('beforeRestore');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)})}
-  return {uid,blank,update,migrate,validate,previous};
+  return {uid,blank,update,migrate,validate,previous,mealItem};
 })();

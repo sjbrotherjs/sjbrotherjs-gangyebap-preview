@@ -5,6 +5,7 @@ self.addEventListener('install',event=>{
   event.waitUntil((async()=>{
     const cache=await caches.open(cacheName);
     for(let i=0;i<offlineFiles.length;i+=12)await cache.addAll(offlineFiles.slice(i,i+12).map(p=>new Request(p,{cache:'reload'})));
+    await self.skipWaiting();
   })());
 });
 self.addEventListener('activate',event=>{

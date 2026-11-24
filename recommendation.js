@@ -7,7 +7,7 @@ const Recommend={
   },
   weights:{categoryStart:72,categoryStep:3,fallback:10,repeatPenalty:14,favorite:12,pairLimit:6},
   defaults:{아침:['eggrice','coffee','sandwich','eggs'],점심:['bibimbap','burger','tteokbokki','ramen'],저녁:['kimchistew','salad','chicken','omurice']},
-  list(type,cart,state){
+  list(type,cart,state,limit=4){
     const cards=[...catalog.cards], known=new Set(cards.map(c=>c.row[0]));
     const additional=[...state.personal,...state.meals.filter(m=>m.type===type).slice(-30).flatMap(m=>m.items.map(i=>i.row))];
     for(const row of additional){
@@ -39,7 +39,7 @@ const Recommend={
       const name=key(card.row);
       if(excluded.has(name))continue;
       excluded.add(name);result.push(card);
-      if(result.length===4)break;
+      if(result.length===limit)break;
     }
     return result;
   }

@@ -30,36 +30,41 @@
     <div id="cart" aria-live="polite"></div>
     <button id="history" type="button">지난 기록 <span aria-hidden="true">›</span></button>
   </section>
-  <div class="libraryShortcut">
-    <span class="libraryShortcutLabel"><span class="bookIcon" aria-hidden="true"></span>내 음식라이브러리</span>
-    <button id="manual" type="button">＋ 직접 등록</button>
-  </div>
+  <section class="surface" aria-labelledby="quickTitle">
+    <h2 id="quickTitle">오늘 무엇을 드셨나요?</h2>
+    <div id="quickGroups" class="categoryGrid"></div>
+  </section>
   <section class="surface" aria-labelledby="libraryTitle">
-    <h2 id="libraryTitle">내 음식 라이브러리</h2>
+    <div class="sectionHead"><h2 id="libraryTitle">내 음식 라이브러리</h2><button id="manual" type="button">＋ 직접 입력</button></div>
     <div id="libraryTabs" class="libraryTabs" aria-label="라이브러리 분류">
-      <button data-library="often">자주 먹는</button><button data-library="favorite">즐겨찾기</button><button data-library="recent">최근 음식</button><button data-library="own">직접 등록</button>
+      <button data-library="often">자주 먹는</button><button data-library="favorite">즐겨찾기</button><button data-library="recent">최근 음식</button><button data-library="sets">내 세트</button><button data-library="own">직접 등록</button>
     </div>
     <div id="library"></div>
   </section>
   <section class="foodSearch" role="search" aria-label="음식 검색">
     <label class="searchBar"><span class="searchIcon" aria-hidden="true"></span><input id="query" type="search" aria-label="음식명 · 브랜드 · 메뉴 검색" placeholder="음식명 · 브랜드 · 메뉴 검색"></label>
-    <small id="count" aria-live="polite"></small>
-    <div id="matches" class="foodGrid"></div>
+    <div class="sectionHead"><small id="count" aria-live="polite"></small><button id="clearSearch" type="button" hidden>검색 닫기</button></div>
+    <div id="matches" class="resultList"></div>
   </section>
   <section class="surface categorySurface" aria-labelledby="categoryTitle">
     <div class="sectionHead categoryHead">
-      <h2 id="categoryTitle">음식 종류 선택</h2>
-      <button id="brandBrowse" class="brandBrowse" type="button" aria-haspopup="dialog" aria-controls="sheet">브랜드·장소 <span aria-hidden="true">›</span></button>
+      <h2 id="categoryTitle">브랜드 탐색</h2>
+      <button id="brandBrowse" class="brandBrowse" type="button" aria-haspopup="dialog" aria-controls="sheet">전체보기 <span aria-hidden="true">›</span></button>
     </div>
     <div id="categories" class="categoryGrid"></div>
-    <div id="categoryOptions" class="foodGrid"></div>
   </section>
 </main>
+<aside id="calculator" aria-label="식사 계산기" hidden>
+  <details id="related" open hidden><summary>함께 먹을 만한 음식</summary><div id="relatedFoods" class="categoryGrid"></div></details>
+  <div class="sectionHead"><button id="toggleDraft" type="button" aria-controls="draftRows" aria-expanded="true">식사 계산기</button><small id="draftTotal" aria-live="polite"></small><button id="finishMeal" type="button">계산 완료</button></div>
+  <div id="draftRows"></div>
+  <button id="saveSet" type="button">＋ 세트 저장</button>
+</aside>
 <dialog id="sheet" aria-labelledby="dialogTitle">
   <div class="dialogHead"><h2 id="dialogTitle"></h2><button id="close" aria-label="닫기">×</button></div>
   <div id="panel"></div>
 </dialog>
 <output id="status" role="status"></output>
-<script src="db/start.js"></script><script src="db/brands.js"></script><script src="catalog.js"></script><script src="nutrition.js"></script><script src="recommendation.js"></script><script src="library.js"></script><script src="storage.js"></script><script src="app.js"></script>
+<script src="db/start.js"></script><script src="db/brands.js"></script><script src="catalog.js"></script><script src="nutrition.js"></script><script src="recommendation.js"></script><script src="library.js"></script><script src="storage.js"></script><script src="meal.js"></script><script src="app.js"></script>
 </body>
 </html>
